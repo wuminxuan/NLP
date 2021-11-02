@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-from util import STOP_TAG,START_TAG,argmax,log_sum_exp
+from util import STOP_TAG,START_TAG,argmax,log_sum_exp,use_cuda
 
 torch.manual_seed(1)
 
@@ -100,7 +100,10 @@ class BiLSTM_CRF(nn.Module):
     def neg_log_likelihood(self,sentence,tags):
         feats=self._get_lstm_features(sentence)
         forward_score=self._forward_alg(feats)
-        gold_score=self._score_sentence(feats,tags)
+        if(use_cuda):
+            gold_score=self._score_sentence(feats,tags).cuda()
+        else:
+            gold_score = self._score_sentence(feats, tags)
         return forward_score-gold_score
 
     # _forward_alg求出的是损失函数log_sum_exp这一项
@@ -108,7 +111,10 @@ class BiLSTM_CRF(nn.Module):
         init_alphas=torch.full((1,self.target_size),-10000.)
         #起始状态score定义为0
         init_alphas[0][self.tag_to_ix[START_TAG]]=0.
-        forward_var=init_alphas
+        if(use_cuda):
+            forward_var=init_alphas.cuda()
+        else:
+            forward_var = init_alphas
 
         #依次遍历句子中所有词
         #feats:(seq_len,tag_size) LSTM映射到tag space的结果
@@ -117,10 +123,14 @@ class BiLSTM_CRF(nn.Module):
             alphas_t=[]
             #遍历当前时间步的所有可能状态
             for next_tag in range(self.target_size):
-                emit_score=feat[next_tag].view(1,-1).expand(1,self.target_size)
-
+                if(use_cuda):
+                    emit_score=feat[next_tag].view(1,-1).expand(1,self.target_size).cuda()
+                    trans_score = self.transitions[next_tag].view(1, -1).cuda()
+                else:
+                    emit_score = feat[next_tag].view(1, -1).expand(1, self.target_size)
+                    trans_score = self.transitions[next_tag].view(1, -1)
                 #其他状态转移到next_tag(当前状态)的概率
-                trans_score=self.transitions[next_tag].view(1,-1)
+
 
                 #计算log_sum_exp之前 状态i到状态next_tag的值
                 next_tag_var=forward_var+trans_score+emit_score
@@ -129,7 +139,10 @@ class BiLSTM_CRF(nn.Module):
             forward_var=torch.cat(alphas_t).view(1,-1)
 
         #最后一步加上最终状态到STOP_TAG的值
-        terminal_var=forward_var+self.transitions[self.tag_to_ix[STOP_TAG]]
+        if(use_cuda):
+            terminal_var=forward_var+self.transitions[self.tag_to_ix[STOP_TAG]].cuda()
+        else:
+            terminal_var = forward_var + self.transitions[self.tag_to_ix[STOP_TAG]]
         #求出最终log_sum_exp的值
         alpha=log_sum_exp(terminal_var)
         return alpha
@@ -139,8 +152,10 @@ class BiLSTM_CRF(nn.Module):
         score=torch.zeros(1)
 
         #加上起始状态
-        tags=torch.cat([torch.tensor([self.tag_to_ix[START_TAG]],dtype=torch.long),tags])
-
+        if(use_cuda):
+            tags=torch.cat([torch.cuda.LongTensor([self.tag_to_ix[START_TAG]]),tags])
+        else:
+            tags = torch.cat([torch.LongTensor([self.tag_to_ix[START_TAG]]), tags])
 
         for i,feat in enumerate(feats):
             score=score+self.transitions[tags[i+1],tags[i]]+feat[tags[i+1]]

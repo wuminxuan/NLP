@@ -1,6 +1,28 @@
 import torch
 START_TAG="<start>"
 STOP_TAG="<stop>"
+from Load_Data import getData
+
+tag_to_ix={"B-ORG":0,"B-LOC":1,"B-MISC":2,"I-ORG":3,"I-MISC":4,"I-PER":5,"I-LOC":6,
+           "O":7,START_TAG:8,STOP_TAG:9}
+training_data = getData('./data/eng.train')
+test_data=getData('./data/eng.testa')
+use_cuda=False
+word_to_ix = {}
+
+for sentence,tags in training_data:
+    for word in sentence:
+        if word not in word_to_ix:
+            word_to_ix[word]=len(word_to_ix)
+
+for sentence,tags in test_data:
+    for word in sentence:
+        if word not in word_to_ix:
+            word_to_ix[word]=len(word_to_ix)
+
+ix_to_tag={}
+for k,v in tag_to_ix.items():
+    ix_to_tag[v]=k
 
 
 def argmax(vec):
@@ -17,24 +39,8 @@ def prepare_sequence(seq,to_ix):
     idxs=[to_ix[w] for w in seq]
     return torch.tensor(idxs,dtype=torch.long)
 
-def get_entity(char_seq, tag_seq):
-    length = len(char_seq)
-    entity = []
-    for i, (char, tag) in enumerate(zip(char_seq, tag_seq)):
-        if tag == 'B':
-            if 'ent' in locals().keys():
-                entity.append(ent)
-                del ent
-            ent = char
-            if i + 1 == length:
-                entity.append(ent)
-        if tag == 'I':
-            ent = ent + " " + char
-            if i + 1 == length:
-                entity.append(ent)
-        if tag not in ['B', 'I']:
-            if 'ent' in locals().keys():
-                entity.append(ent)
-                del ent
-            continue
-    return entity
+def is_entity(word_tag):
+    if(word_tag in ["B-ORG","B-LOC","B-MISC","I-ORG","I-MISC","I-PER","I-LOC"]):
+        return True
+    else:
+        return False
